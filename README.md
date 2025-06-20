@@ -56,20 +56,20 @@ uv sync
 
 ```bash
 uv run python main.py download-content-images \
-  --content-image-list-excel content-images.xlsx \
+  --content-image-list-excel ./data/content-images.xlsx \
   --output-dir ./data/content-images/
 ```
 
 ### Download Civitai models
 
-Some model requires a Civitai API token for downloading.
+Some models require a Civitai API token for downloading.
 Civitai API token can be issued with the [following steps](https://education.civitai.com/civitais-guide-to-downloading-via-api/)
 
 **Note**: Require ~20GB of free disk space
 
 ```bash
 uv run python main.py download-civitai-models \
-  --model-list-excel models.xlsx \
+  --model-list-excel ./data/models.xlsx \
   --output-dir ./data/models/ \
   --token <your_civitai_api_token>
 ```
@@ -90,14 +90,14 @@ uv run python main.py generate-pair \
 ### Train and evaluate the proposed method model
 
 ```bash
-uv run python main.py train-and-evalute-proposed-method \
-  --content-image-dir ./data/content-images/ \
+uv run python main.py train-and-evaluate-proposed-method \
+  --generated-image-dir ./data/generated-images/ \
   --alpha 0.5 \
   --vit-name "vit_base_patch16_224" \
   --num-transformer-layers 2 \
-  --num-heads 100 \
+  --num-heads 8 \
   --batch-size 16 \
-  --max-epochs \
+  --max-epochs 30 \
   --num-workers 4 \
   --data-csv ./data/data.csv \
   --model-save-path ./trained-model.pth \

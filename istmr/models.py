@@ -17,7 +17,7 @@ sys.path.append(allRank_dir.as_posix())
 sys.path.append((allRank_dir / "allrank" / "models" / "losses").as_posix())
 
 try:
-    from neuralNDCG import neuralNDCG
+    import neuralNDCG
 except ImportError as e:
     print(e)
     raise ImportError(
@@ -77,7 +77,7 @@ class LearnablePositionalEmbedding(nn.Module):
 class RetrievalNet(pl.LightningModule):
     """
     Retrieval network using a ViT backbone, Transformer over model+patch tokens,
-    combined Softmax + neuralNDCG loss for ranking.
+    combined BCE + neuralNDCG loss for ranking.
     """
 
     def __init__(

@@ -151,9 +151,9 @@ def generate_images(
 
 @app.command()
 def train_and_evaluate_proposed_method(
-    content_image_dir: Annotated[
+    generated_image_dir: Annotated[
         Path, typer.Option(help="Directory containing content images")
-    ] = "./data/content-images/",
+    ] = "./data/generated-images/",
     alpha: Annotated[float, typer.Option(help="Alpha value for the model")] = 0.5,
     vit_name: Annotated[
         str, typer.Option(help="Name of the ViT model to use (e.g., 'vit_base_patch16_224')")
@@ -175,7 +175,7 @@ def train_and_evaluate_proposed_method(
 ):
     df_data = pd.read_csv(data_csv)
     data_module = create_data_module(
-        root_dir=content_image_dir,
+        root_dir=generated_image_dir,
         df_data=df_data,
         batch_size=batch_size,
         num_workers=num_workers,
@@ -200,6 +200,19 @@ def train_and_evaluate_proposed_method(
     print(f"Model saved to {model_save_path}")
     print(f"ViT model saved to {vit_save_path}")
     print(f"Test metrics saved to {test_results_csv}")
+
+
+@app.command()
+def fix_seed():
+    df_data = pd.read_csv("./data/data.csv")
+
+    def new_generated_path(path):
+        seed = path.split("_")[-1].split(".")[0]
+        new_seed = int(seed) + 1
+        return path.replace(f"_{seed}.jpg", f"_{new_seed}.jpg")
+
+    df_data["generated_image_path"] = df_data["generated_image_path"].apply(new_generated_path)
+    df_data.to_csv("./data/data.csv", index=False)
 
 
 if __name__ == "__main__":
