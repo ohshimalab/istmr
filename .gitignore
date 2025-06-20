@@ -199,3 +199,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+data/content-images
+
+data/generated-images
+
+data/models
+
+lightning_logs
