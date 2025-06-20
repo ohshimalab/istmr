@@ -81,12 +81,10 @@ uv run python main.py download-civitai-models \
 ```bash
 uv run python main.py generate-pair \
   --content-image-dir ./data/content-images/ \
-  --content-image-id 1 \
   --model-dir ./data/models/ \
-  --model-version-id 4844_5571 \
-  --model-trigger-word "" \
-  --seed 0 \
   --output-dir ./data/generated-images/
+  --data-csv ./data/data.csv
+  --model-excel ./data/models.xslx
 ```
 
 ### Train and evaluate the proposed method model
