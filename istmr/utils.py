@@ -1,13 +1,20 @@
+import os
 import random
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+import pytorch_lightning as pl
 import requests as python_requests
+import timm
 import torch
 from bs4 import BeautifulSoup
 from curl_cffi import requests
 from diffusers import DPMSolverMultistepScheduler, StableDiffusionImg2ImgPipeline
 from PIL import Image
+
+from istmr.dataset import LoRADataModule
+from istmr.models import RetrievalNet
 
 
 def download_image_from_unsplash(url, save_path):
@@ -136,6 +143,7 @@ def generate_image(
     negative_prompt: str = "",
     seed: int = 0,
 ):
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
     prompt = f"((masterpiece, ultra quality)), {trigger_word}"
     negative_prompt = f"EasyNegativeV2, badhandv4, nsfw, {negative_prompt}"
     generator = get_fixed_generator(seed)
@@ -172,3 +180,125 @@ def generate_image_from_pair(
         seed=seed,
     )
     return result_image
+
+
+def get_data_transform(vit_name: str):
+    with torch.no_grad():
+        temp_vit_model = timm.create_model(vit_name, pretrained=True)
+        data_config = timm.data.resolve_model_data_config(temp_vit_model)
+        train_transform = timm.data.create_transform(**data_config, is_training=True)
+        test_transform = timm.data.create_transform(**data_config, is_training=False)
+    del temp_vit_model
+    return train_transform, test_transform
+
+
+def seed_everything(seed: int = 42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    pl.seed_everything(seed, workers=True)
+
+
+def get_model(alpha: float, vit_name: str, num_transformer_layers: int, num_heads: int, num_models: int, lr: float):
+    """
+    Create a ViT model and a RetrievalNet model.
+    Args:
+        alpha (float): Weight for BCE loss in RetrievalNet.
+        vit_name (str): Name of the ViT model to use.
+        num_transformer_layers (int): Number of transformer layers in RetrievalNet.
+        num_heads (int): Number of attention heads in RetrievalNet.
+        num_models (int): Number of models to retrieve.
+        lr (float): Learning rate for the optimizer.
+    Returns:
+        tuple: A tuple containing the ViT model and the RetrievalNet model.
+    """
+    vit = timm.create_model(vit_name, pretrained=True, num_classes=0)
+    model = RetrievalNet(
+        vit=vit,
+        num_models=num_models,
+        lr=lr,
+        alpha=alpha,
+        num_layers=num_transformer_layers,
+        nheads=num_heads,
+    )
+    return vit, model
+
+
+def get_trainer(max_epochs: int):
+    trainer = pl.Trainer(
+        max_epochs=max_epochs,
+        accelerator="auto",
+        devices=1,
+        callbacks=[],
+    )
+    return trainer
+
+
+def get_test_metrics_df(
+    model: RetrievalNet,
+    data_module: pl.LightningDataModule,
+    trainer: pl.Trainer,
+):
+    test_result = trainer.test(model, data_module)[0]
+    test_metric_rows = [
+        {
+            "alpha": model.hparams.alpha,
+            "test_loss": test_result["test_loss"],
+            "test_mrr": test_result["test_mrr"],
+        }
+    ]
+    df_test_metrics = pd.DataFrame(test_metric_rows)
+    return df_test_metrics
+
+
+def train_model(
+    alpha: float,
+    vit_name: str,
+    num_transformer_layers: int,
+    num_heads: int,
+    num_models: int,
+    lr: float,
+    data_module: pl.LightningDataModule,
+    max_epochs: int,
+    seed: int = 0,
+):
+    seed_everything(seed)  # reset seed for reproducibility
+    vit, model = get_model(alpha, vit_name, num_transformer_layers, num_heads, num_models, lr)
+    trainer = get_trainer(max_epochs)
+    trainer.fit(model, data_module)
+    df_test_metrics = get_test_metrics_df(
+        model=model,
+        data_module=data_module,
+        trainer=trainer,
+    )
+    return vit, model, df_test_metrics
+
+
+def create_data_module(
+    root_dir: Path, df_data: pd.DataFrame, vit_name: str, batch_size: int, num_workers: int
+) -> LoRADataModule:
+    """
+    Create a LoRADataModule instance from the given parameters.
+
+    Args:
+        root_dir (Path): Root directory for the dataset.
+        df_data (pd.DataFrame): DataFrame containing the dataset information.
+        vit_name (str): Name of the ViT model to use for data transformations.
+        batch_size (int): Batch size for data loading.
+        num_workers (int): Number of workers for data loading.
+
+    Returns:
+        LoRADataModule: An instance of LoRADataModule.
+    """
+    train_transform, test_transform = get_data_transform(vit_name)
+    data_module = LoRADataModule(
+        root_dir=root_dir,
+        df_data=df_data,
+        train_transform=train_transform,
+        test_transform=test_transform,
+        batch_size=batch_size,
+        num_workers=num_workers,
+    )
+    data_module.setup()
+    return data_module
