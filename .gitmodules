@@ -1,0 +1,3 @@
+[submodule "allRank"]
+	path = allRank
+	url = git@github.com:allegro/allRank.git
